@@ -117,22 +117,9 @@ plot(prevVAH, "Prev VAH", color=color.new(color.red,   0), style=plot.style_line
 plot(prevVAL, "Prev VAL", color=color.new(color.green, 0), style=plot.style_linebr)
 plot(prevPOC, "Prev POC", color=color.new(color.yellow,0), style=plot.style_linebr)
 
-// ---------- Bias по наклону POC за N сессий ----------
-f_biasFromPOC() =>
-    int b = 0
-    if array.size(pocHist) >= biasN
-        bool dn = true
-        bool up = true
-        for i = 0 to biasN - 2
-            cur = array.get(pocHist, i)
-            old = array.get(pocHist, i + 1)
-            if cur >= old
-                dn := false
-            if cur <= old
-                up := false
-        b := dn ? -1 : up ? 1 : 0
-    b
-bias = f_biasFromPOC()
+// ---------- Bias ----------
+sessOpen = request.security(syminfo.tickerid, sessRes, open, lookahead=barmerge.lookahead_off)
+bias = na(prevVAL) or na(prevVAH) ? 0 : (sessOpen < prevVAL ? -1 : sessOpen > prevVAH ? 1 : 0)
 
 // ---------- CVD ----------
 rng = high - low

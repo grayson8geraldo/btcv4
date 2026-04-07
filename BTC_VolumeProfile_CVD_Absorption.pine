@@ -124,28 +124,13 @@ plot(showLv ? prevVAH : na, "Prev VAH", color=color.new(color.red,   0), style=p
 plot(showLv ? prevVAL : na, "Prev VAL", color=color.new(color.green, 0), style=plot.style_linebr, linewidth=2)
 plot(showLv ? prevPOC : na, "Prev POC", color=color.new(color.yellow,0), style=plot.style_linebr, linewidth=2)
 
-// ---------- Bias по наклону POC за N последних сессий (вариант C из ТЗ) ----------
-// "Если каждый день зона стоимости смещается ниже — это подтверждает
-//  устойчивый нисходящий тренд" — bias строится по строгой монотонности
-//  POC за последние biasN закрытых сессий.
-f_biasFromPOC() =>
-    int b = 0
-    if array.size(pocHist) >= biasN
-        bool dn = true
-        bool up = true
-        for i = 0 to biasN - 2
-            cur = array.get(pocHist, i)       // более свежий
-            old = array.get(pocHist, i + 1)   // более старый
-            if cur >= old
-                dn := false
-            if cur <= old
-                up := false
-        b := dn ? -1 : up ? 1 : 0
-    b
-bias = f_biasFromPOC()
+// ---------- Bias ----------
+// Bearish if open below prev VAL; Bullish if open above prev VAH; Neutral inside VA
+sessOpen = request.security(syminfo.tickerid, sessRes, open, lookahead=barmerge.lookahead_off)
+bias = na(prevVAL) or na(prevVAH) ? 0 : (sessOpen < prevVAL ? -1 : sessOpen > prevVAH ? 1 : 0)
 
 if showBias and isNewSess and not na(prevVAH)
-    txt = bias == -1 ? "BEARISH (POC↓)" : bias == 1 ? "BULLISH (POC↑)" : "NEUTRAL (POC flat)"
+    txt = bias == -1 ? "BEARISH (open<VAL)" : bias == 1 ? "BULLISH (open>VAH)" : "NEUTRAL (inside VA)"
     col = bias == -1 ? color.red : bias == 1 ? color.green : color.gray
     label.new(bar_index, high, txt, style=label.style_label_down, color=col, textcolor=color.white, size=size.small)
 
