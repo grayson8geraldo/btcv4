@@ -169,5 +169,31 @@ plotshape(longSig,  "Long  (Absorption)", shape.triangleup,   location.belowbar,
 alertcondition(shortSig, "BTC VP Short Absorption", "Short absorption at VAH/POC")
 alertcondition(longSig,  "BTC VP Long Absorption",  "Long absorption at VAL/POC")
 
-// ---------- CVD pane (small overlay via plotchar removed; use separate indicator if needed) ----------
-// To keep overlay clean, CVD itself is not plotted on price chart.
+// ---------- SL / TP visualization ----------
+grpRR  = "Risk / Reward"
+atrLen = input.int(14, "ATR length", minval=2, group=grpRR)
+slBuf  = input.float(0.25, "SL buffer (ATR)", minval=0.0, step=0.05, group=grpRR)
+rrMult = input.float(2.0, "TP R:R multiple", minval=0.5, step=0.1, group=grpRR)
+
+atr = ta.atr(atrLen)
+
+f_drawTrade(_isLong, _entry, _sl, _tp) =>
+    col = _isLong ? color.green : color.red
+    line.new(bar_index, _entry, bar_index + 10, _entry, color=color.new(color.blue, 0), width=1, extend=extend.none)
+    line.new(bar_index, _sl,    bar_index + 10, _sl,    color=color.new(color.red,  0), width=1, style=line.style_dashed)
+    line.new(bar_index, _tp,    bar_index + 10, _tp,    color=color.new(color.green,0), width=1, style=line.style_dashed)
+    label.new(bar_index + 10, _entry, "E " + str.tostring(_entry, format.mintick), style=label.style_label_left, color=color.new(color.blue, 70), textcolor=color.white, size=size.tiny)
+    label.new(bar_index + 10, _sl,    "SL " + str.tostring(_sl, format.mintick), style=label.style_label_left, color=color.new(color.red, 70),  textcolor=color.white, size=size.tiny)
+    label.new(bar_index + 10, _tp,    "TP " + str.tostring(_tp, format.mintick), style=label.style_label_left, color=color.new(color.green,70), textcolor=color.white, size=size.tiny)
+
+if longSig
+    entry = close
+    sl    = low  - atr * slBuf
+    tp    = entry + (entry - sl) * rrMult
+    f_drawTrade(true, entry, sl, tp)
+
+if shortSig
+    entry = close
+    sl    = high + atr * slBuf
+    tp    = entry - (sl - entry) * rrMult
+    f_drawTrade(false, entry, sl, tp)
