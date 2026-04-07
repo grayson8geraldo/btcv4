@@ -28,6 +28,7 @@ grpCVD  = "CVD / Absorption"
 absorbK = input.float(1.3, "Absorption volume multiplier (vs SMA20)", minval=1.0, step=0.1, group=grpCVD)
 divLook = input.int(5,    "Divergence lookback", minval=2, group=grpCVD)
 levTol  = input.float(0.15, "Level tolerance %", minval=0.01, step=0.01, group=grpCVD) / 100.0
+biasN   = input.int(3, "Bias lookback (sessions)", minval=2, maxval=10, group=grpCVD)
 
 grpRR   = "Risk / Reward / Trail"
 atrLen  = input.int(14, "ATR length", minval=2, group=grpRR)
@@ -53,6 +54,7 @@ isNewSess = ta.change(time(sessRes)) != 0
 var float prevVAH = na
 var float prevVAL = na
 var float prevPOC = na
+var float[] pocHist = array.new_float()
 
 if isNewSess
     n = array.size(curPrices)
@@ -94,6 +96,9 @@ if isNewSess
             prevVAH := loP + (up + 1) * step
             prevVAL := loP + dn * step
             prevPOC := loP + (pocIdx + 0.5) * step
+            array.unshift(pocHist, prevPOC)
+            if array.size(pocHist) > biasN
+                array.pop(pocHist)
     array.clear(curPrices)
     array.clear(curVols)
 
@@ -112,11 +117,22 @@ plot(prevVAH, "Prev VAH", color=color.new(color.red,   0), style=plot.style_line
 plot(prevVAL, "Prev VAL", color=color.new(color.green, 0), style=plot.style_linebr)
 plot(prevPOC, "Prev POC", color=color.new(color.yellow,0), style=plot.style_linebr)
 
-// ---------- Bias ----------
-var float thisSessOpen = na
-if isNewSess
-    thisSessOpen := open
-bias = na(prevVAL) or na(prevVAH) or na(thisSessOpen) ? 0 : (thisSessOpen < prevVAL ? -1 : thisSessOpen > prevVAH ? 1 : 0)
+// ---------- Bias по наклону POC за N сессий ----------
+f_biasFromPOC() =>
+    int b = 0
+    if array.size(pocHist) >= biasN
+        bool dn = true
+        bool up = true
+        for i = 0 to biasN - 2
+            cur = array.get(pocHist, i)
+            old = array.get(pocHist, i + 1)
+            if cur >= old
+                dn := false
+            if cur <= old
+                up := false
+        b := dn ? -1 : up ? 1 : 0
+    b
+bias = f_biasFromPOC()
 
 // ---------- CVD ----------
 rng = high - low

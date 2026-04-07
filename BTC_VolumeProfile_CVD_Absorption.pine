@@ -34,6 +34,7 @@ levTol  = input.float(0.15, "Level tolerance % (proximity to VAH/VAL/POC)", minv
 grpUI   = "Display"
 showLv  = input.bool(true,  "Show prev session levels", group=grpUI)
 showBias= input.bool(true,  "Show bias label", group=grpUI)
+biasN   = input.int(3, "Bias lookback (sessions)", minval=2, maxval=10, group=grpUI, tooltip="Кол-во прошлых POC для определения наклона зоны стоимости")
 
 // ---------- Helper: build session volume profile from LTF data ----------
 // Request arrays of LTF highs/lows/volumes within the higher session timeframe.
@@ -53,6 +54,7 @@ var float prevVAL = na
 var float prevPOC = na
 var float prevHi  = na
 var float prevLo  = na
+var float[] pocHist = array.new_float()
 
 // On the bar that starts a new session, compute profile from previous arrays
 if isNewSess
@@ -98,6 +100,10 @@ if isNewSess
             prevPOC := loP + (pocIdx + 0.5) * step
             prevHi  := hiP
             prevLo  := loP
+            // история POC для определения наклона VA
+            array.unshift(pocHist, prevPOC)
+            if array.size(pocHist) > biasN
+                array.pop(pocHist)
     array.clear(curPrices)
     array.clear(curVols)
 
@@ -118,16 +124,28 @@ plot(showLv ? prevVAH : na, "Prev VAH", color=color.new(color.red,   0), style=p
 plot(showLv ? prevVAL : na, "Prev VAL", color=color.new(color.green, 0), style=plot.style_linebr, linewidth=2)
 plot(showLv ? prevPOC : na, "Prev POC", color=color.new(color.yellow,0), style=plot.style_linebr, linewidth=2)
 
-// ---------- Bias ----------
-// Используем open первого бара новой сессии напрямую с текущего ТФ,
-// чтобы избежать рассинхрона request.security + lookahead_off.
-var float thisSessOpen = na
-if isNewSess
-    thisSessOpen := open
-bias = na(prevVAL) or na(prevVAH) or na(thisSessOpen) ? 0 : (thisSessOpen < prevVAL ? -1 : thisSessOpen > prevVAH ? 1 : 0)
+// ---------- Bias по наклону POC за N последних сессий (вариант C из ТЗ) ----------
+// "Если каждый день зона стоимости смещается ниже — это подтверждает
+//  устойчивый нисходящий тренд" — bias строится по строгой монотонности
+//  POC за последние biasN закрытых сессий.
+f_biasFromPOC() =>
+    int b = 0
+    if array.size(pocHist) >= biasN
+        bool dn = true
+        bool up = true
+        for i = 0 to biasN - 2
+            cur = array.get(pocHist, i)       // более свежий
+            old = array.get(pocHist, i + 1)   // более старый
+            if cur >= old
+                dn := false
+            if cur <= old
+                up := false
+        b := dn ? -1 : up ? 1 : 0
+    b
+bias = f_biasFromPOC()
 
 if showBias and isNewSess and not na(prevVAH)
-    txt = bias == -1 ? "BEARISH (open<VAL)" : bias == 1 ? "BULLISH (open>VAH)" : "NEUTRAL (inside VA)"
+    txt = bias == -1 ? "BEARISH (POC↓)" : bias == 1 ? "BULLISH (POC↑)" : "NEUTRAL (POC flat)"
     col = bias == -1 ? color.red : bias == 1 ? color.green : color.gray
     label.new(bar_index, high, txt, style=label.style_label_down, color=col, textcolor=color.white, size=size.small)
 
