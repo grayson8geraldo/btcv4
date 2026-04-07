@@ -113,8 +113,10 @@ plot(prevVAL, "Prev VAL", color=color.new(color.green, 0), style=plot.style_line
 plot(prevPOC, "Prev POC", color=color.new(color.yellow,0), style=plot.style_linebr)
 
 // ---------- Bias ----------
-sessOpen = request.security(syminfo.tickerid, sessRes, open, lookahead=barmerge.lookahead_off)
-bias = na(prevVAL) or na(prevVAH) ? 0 : (sessOpen < prevVAL ? -1 : sessOpen > prevVAH ? 1 : 0)
+var float thisSessOpen = na
+if isNewSess
+    thisSessOpen := open
+bias = na(prevVAL) or na(prevVAH) or na(thisSessOpen) ? 0 : (thisSessOpen < prevVAL ? -1 : thisSessOpen > prevVAH ? 1 : 0)
 
 // ---------- CVD ----------
 rng = high - low

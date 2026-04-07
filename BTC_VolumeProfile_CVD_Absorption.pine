@@ -119,9 +119,12 @@ plot(showLv ? prevVAL : na, "Prev VAL", color=color.new(color.green, 0), style=p
 plot(showLv ? prevPOC : na, "Prev POC", color=color.new(color.yellow,0), style=plot.style_linebr, linewidth=2)
 
 // ---------- Bias ----------
-// Bearish if open below prev VAL; Bullish if open above prev VAH; Neutral inside VA
-sessOpen = request.security(syminfo.tickerid, sessRes, open, lookahead=barmerge.lookahead_off)
-bias = na(prevVAL) or na(prevVAH) ? 0 : (sessOpen < prevVAL ? -1 : sessOpen > prevVAH ? 1 : 0)
+// Используем open первого бара новой сессии напрямую с текущего ТФ,
+// чтобы избежать рассинхрона request.security + lookahead_off.
+var float thisSessOpen = na
+if isNewSess
+    thisSessOpen := open
+bias = na(prevVAL) or na(prevVAH) or na(thisSessOpen) ? 0 : (thisSessOpen < prevVAL ? -1 : thisSessOpen > prevVAH ? 1 : 0)
 
 if showBias and isNewSess and not na(prevVAH)
     txt = bias == -1 ? "BEARISH (open<VAL)" : bias == 1 ? "BULLISH (open>VAH)" : "NEUTRAL (inside VA)"
