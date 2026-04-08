@@ -36,19 +36,15 @@ showLv  = input.bool(true,  "Show prev session levels", group=grpUI)
 showBias= input.bool(true,  "Show bias label", group=grpUI)
 biasN   = input.int(3, "Bias lookback (sessions)", minval=2, maxval=10, group=grpUI, tooltip="Кол-во прошлых POC для определения наклона зоны стоимости")
 
-// ---------- Liquidity zone proxies (optional layers) ----------
-// ВАЖНО: TradingView не имеет доступа к стакану (order book). Эти слои —
-// ИСТОРИЧЕСКИЕ аппроксимации зон вероятной ликвидности из OHLCV-данных.
-// Для настоящих стен лимитных ордеров нужен Bookmap / Sierra Chart / ATAS.
-grpLiq       = "Liquidity Zones (proxies)"
-showNakedPOC = input.bool(false, "Naked POCs (непротестированные POC)", group=grpLiq, tooltip="POC прошлых сессий, которые цена ещё не пробила — классические магниты")
-nakedPOClen  = input.int(10, "Naked POC lookback (sessions)", minval=2, maxval=30, group=grpLiq)
-showHVNLVN   = input.bool(false, "HVN/LVN of prev session", group=grpLiq, tooltip="High/Low Volume Nodes внутри вчерашней VA: пики концентрации (HVN) и провалы (LVN)")
-nodeDelta    = input.float(0.25, "Node prominence (отклонение от среднего бина)", minval=0.05, step=0.05, group=grpLiq)
-showEqual    = input.bool(false, "Equal H/L with volume spike", group=grpLiq, tooltip="Свинг-хаи/лоу с повышенным объёмом — зоны накопления стопов и лимиток")
-eqPivLen     = input.int(5, "Equal H/L pivot length", minval=2, group=grpLiq)
-eqVolMult    = input.float(1.5, "Pivot volume multiplier", minval=1.0, step=0.1, group=grpLiq)
-eqMaxLines   = input.int(20, "Equal H/L max lines to keep", minval=5, maxval=100, group=grpLiq)
+// ---------- Liquidity zone targets (always visible) ----------
+// Зоны вероятной ликвидности — постоянно подсвечены на графике, чтобы
+// видеть куда может пойти цена после входа (для выбора целей TP).
+// Это исторические VP-уровни (не настоящий стакан), но именно они
+// работают как магниты в Volume Profile стратегиях.
+grpLiq       = "Liquidity Zones"
+showPrevHL   = input.bool(true,  "Prev session High / Low", group=grpLiq, tooltip="Максимум и минимум вчерашней сессии — крайние цели и часто зоны охоты на стопы")
+showNakedPOC = input.bool(true,  "Naked POCs (непротестированные POC прошлых сессий)", group=grpLiq, tooltip="POC прошлых сессий, которые цена ещё не пробила — классические магниты VP")
+nakedPOClen  = input.int(15, "Naked POC lookback (sessions)", minval=2, maxval=30, group=grpLiq)
 
 // ---------- Helper: build session volume profile from LTF data ----------
 // Request arrays of LTF highs/lows/volumes within the higher session timeframe.
@@ -73,9 +69,6 @@ var float[] pocHist = array.new_float()
 // Liquidity zones state
 var line[]  nakedPOClines = array.new_line()
 var float[] nakedPOCvals  = array.new_float()
-var line[]  hvnLines      = array.new_line()
-var line[]  lvnLines      = array.new_line()
-var line[]  eqLines       = array.new_line()
 
 // On the bar that starts a new session, compute profile from previous arrays
 if isNewSess
@@ -135,27 +128,6 @@ if isNewSess
                     ol = array.pop(nakedPOClines)
                     line.delete(ol)
                     array.pop(nakedPOCvals)
-
-            // ---- HVN / LVN: пики и провалы объёма внутри Value Area ----
-            if showHVNLVN
-                while array.size(hvnLines) > 0
-                    line.delete(array.pop(hvnLines))
-                while array.size(lvnLines) > 0
-                    line.delete(array.pop(lvnLines))
-                avgBin = totalVol / bins
-                for bi = 1 to bins - 2
-                    prvV = array.get(binVol, bi - 1)
-                    curV = array.get(binVol, bi)
-                    nxtV = array.get(binVol, bi + 1)
-                    binPx = loP + (bi + 0.5) * step
-                    // узлы только внутри VA
-                    if binPx >= prevVAL and binPx <= prevVAH
-                        if curV > prvV and curV > nxtV and curV > avgBin * (1 + nodeDelta)
-                            hl = line.new(bar_index, binPx, bar_index + 1, binPx, extend=extend.right, color=color.new(color.purple, 30), width=1)
-                            array.push(hvnLines, hl)
-                        if curV < prvV and curV < nxtV and curV > 0 and curV < avgBin * (1 - nodeDelta)
-                            ll = line.new(bar_index, binPx, bar_index + 1, binPx, extend=extend.right, color=color.new(color.aqua, 50), width=1, style=line.style_dashed)
-                            array.push(lvnLines, ll)
     array.clear(curPrices)
     array.clear(curVols)
 
@@ -172,9 +144,11 @@ if not na(ltfH)
                 array.push(curVols, v)
 
 // ---------- Plot previous session levels ----------
-plot(showLv ? prevVAH : na, "Prev VAH", color=color.new(color.red,   0), style=plot.style_linebr, linewidth=2)
-plot(showLv ? prevVAL : na, "Prev VAL", color=color.new(color.green, 0), style=plot.style_linebr, linewidth=2)
-plot(showLv ? prevPOC : na, "Prev POC", color=color.new(color.yellow,0), style=plot.style_linebr, linewidth=2)
+plot(showLv     ? prevVAH : na, "Prev VAH",  color=color.new(color.red,    0), style=plot.style_linebr, linewidth=2)
+plot(showLv     ? prevVAL : na, "Prev VAL",  color=color.new(color.green,  0), style=plot.style_linebr, linewidth=2)
+plot(showLv     ? prevPOC : na, "Prev POC",  color=color.new(color.yellow, 0), style=plot.style_linebr, linewidth=2)
+plot(showPrevHL ? prevHi  : na, "Prev High", color=color.new(color.lime,  20), style=plot.style_linebr, linewidth=1)
+plot(showPrevHL ? prevLo  : na, "Prev Low",  color=color.new(color.orange,20), style=plot.style_linebr, linewidth=1)
 
 // ---------- Bias ----------
 // Bearish if open below prev VAL; Bullish if open above prev VAH; Neutral inside VA
@@ -197,27 +171,6 @@ if showNakedPOC and array.size(nakedPOClines) > 0
             array.remove(nakedPOClines, k)
             array.remove(nakedPOCvals,  k)
         k := k - 1
-
-// ---------- Equal H/L with volume spike ----------
-// Пивоты с аномально высоким объёмом = вероятные зоны накопления стопов
-// и лимитных заявок (исторический прокси ликвидности).
-ph = ta.pivothigh(high, eqPivLen, eqPivLen)
-pl = ta.pivotlow(low,  eqPivLen, eqPivLen)
-volAtPiv  = volume[eqPivLen]
-volSMAp   = ta.sma(volume, 20)[eqPivLen]
-isHotPiv  = not na(volSMAp) and volAtPiv > volSMAp * eqVolMult
-
-if showEqual and not na(ph) and isHotPiv
-    el = line.new(bar_index - eqPivLen, ph, bar_index, ph, extend=extend.right, color=color.new(color.fuchsia, 30), width=1, style=line.style_dotted)
-    array.push(eqLines, el)
-    while array.size(eqLines) > eqMaxLines
-        line.delete(array.shift(eqLines))
-
-if showEqual and not na(pl) and isHotPiv
-    el2 = line.new(bar_index - eqPivLen, pl, bar_index, pl, extend=extend.right, color=color.new(color.fuchsia, 30), width=1, style=line.style_dotted)
-    array.push(eqLines, el2)
-    while array.size(eqLines) > eqMaxLines
-        line.delete(array.shift(eqLines))
 
 // ---------- CVD (per-bar delta proxy from OHLC) ----------
 // Aggressive buy/sell estimation using bar range allocation
